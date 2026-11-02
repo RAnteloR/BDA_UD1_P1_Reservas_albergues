@@ -77,7 +77,48 @@ def reservas(albergues, noite , pregrino):
     r.incr(key)
     return False
 
+CAMINO = "Norte"
 
+def general_consult():
+    consult,where =cache_redis(CAMINO,NOITE)
+
+    for c in consult:
+        print(f"  {c}")
+    print(f"\nCaducidade restante da chave: {r.ttl(f"booking_left:albergue:{CAMINO}:{NOITE}")} s")
+    print(f"Did it in {where}")
+
+def consult_path_nigth(path,nigth):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT a.nome,a.camino,a.prazas - COUNT(r.id) AS libres from albergues a 
+                JOIN reservas r ON a.id = r.albergue_id
+                WHERE a.camino = %s AND r.noite = %s
+                GROUP BY a.id,a.nome,a.prazas
+                """,(path,NOITE))
+
+            results = cursor.fetchall()
+          
+            return [f" {n} · {c} · {libres}" for n, c, libres in results]
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(e)
+        return False
+
+
+def cache_redis(path,nigth):
+    KEY = f"booking_left:albergue:{path}:{nigth}"
+    exists = r.lrange(KEY,0,-1)
+
+    if exists:
+        return (exists, "REDIS")
+    consult = consult_path_nigth(path,nigth)
+    if consult:
+        print(*consult)
+        r.rpush(KEY,*consult)
+        r.expire(KEY,15)
+    return (consult, "SQL")
+    
 ALBERGUE_ID = 35
 NOITE = "2027-05-02"
 PEREGRINO_ID = 1500
@@ -105,7 +146,7 @@ def simulate(funcion):
 
 if __name__ == "__main__":
     parte = sys.argv[1] if len(sys.argv) > 1 else "start"
-    {"start": start_count, "reserva": start_reservas,"simulate":do_simulate}[parte]()
+    {"start": start_count, "reserva": start_reservas,"simulate":do_simulate,"consult":general_consult}[parte]()
 
 cursor_pg.close()
 conn.close()
