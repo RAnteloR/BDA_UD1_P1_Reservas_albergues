@@ -1,10 +1,11 @@
 import sys
+import threading
 
 import psycopg2
 import os
 from dotenv import load_dotenv
 import redis
-
+import random
 load_dotenv()
 
 
@@ -44,29 +45,67 @@ def start_count():
         print(f"{key} = {libres}")
         
 def start_reservas():
-    print(reservas(ALBERGUE_ID,NOITE,PEREGRINO_ID))
-    
+    booking = reservas(ALBERGUE_ID,NOITE,PEREGRINO_ID)
+    if booking:
+        print(f"Create successfuly")
+    else:
+        print(f"No booking left")
+
 def reservas(albergues, noite , pregrino):
     key = f"prazas:{albergues}:{noite}"
     free = r.decr(key)
-    print(free)
     if free >= 0:
-        cursor_pg.execute("""
-            INSERT INTO reservas (albergue_id, peregrino_id, noite)
-            VALUES (%s, %s, %s)
-        """, (albergues, pregrino, noite))
-        return f"Create successfuly"
+        conn_thread = psycopg2.connect(
+        host="localhost",
+        port=5432,
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD")
+        )
+        try:
+            with conn_thread.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO reservas (albergue_id, peregrino_id, noite)
+                    VALUES (%s, %s, %s)
+                """, (albergues, pregrino, noite))
+                return True
+        except psycopg2.Error as e:
+            conn.rollback()
+            print(f"Peregrino {pregrino}: ERROR: {e}")
+            r.incr(key)
+            return False
     r.incr(key)
-    return f"No booking left"
+    return False
 
 
 ALBERGUE_ID = 35
 NOITE = "2027-05-02"
-PEREGRINO_ID = 1
+PEREGRINO_ID = 1500
 
+
+KEY = f"prazas:{ALBERGUE_ID}:{NOITE}"
+FANS = 10
+
+def do_simulate():
+    simulate(reservas)
+
+def simulate(funcion):
+    bookings = int(r.get(KEY))
+    exitos = []
+    fios = [threading.Thread(target=lambda peregrino_id=random.randint(0,1500) : exitos.append(funcion(ALBERGUE_ID,NOITE,peregrino_id))) for r in range(FANS)]
+    for f in fios:
+        f.start()
+    for f in fios:
+        f.join()
+    print(exitos)
+    vendidas = sum(exitos)
+    print(f"{funcion.__name__:<15} entradas: {bookings} · vendidas: {vendidas:>2} · "
+          f"contador final: {r.get(KEY)}"
+          + ("   ← SOBREVENTA!" if vendidas > bookings else ""))
 
 if __name__ == "__main__":
     parte = sys.argv[1] if len(sys.argv) > 1 else "start"
-    {"start": start_count, "reserva": start_reservas,}[parte]()
+    {"start": start_count, "reserva": start_reservas,"simulate":do_simulate}[parte]()
+
 cursor_pg.close()
 conn.close()
