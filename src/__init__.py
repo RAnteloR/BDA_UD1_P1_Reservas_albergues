@@ -25,9 +25,7 @@ def start_count():
     cursor_pg.execute("""
         SELECT
             a.id,
-            a.prazas,
             r.noite,
-            COUNT(r.id) AS reservas,
             a.prazas - COUNT(r.id) AS libres
         FROM albergues a
         JOIN reservas r ON a.id = r.albergue_id
@@ -36,7 +34,7 @@ def start_count():
 
     resultados = cursor_pg.fetchall()
 
-    for albergue_id, prazas, noite, reservas, libres in resultados:
+    for albergue_id, noite, libres in resultados:
 
         key = f"prazas:{albergue_id}:{noite}"
 
@@ -45,13 +43,10 @@ def start_count():
         print(f"{key} = {libres}")
         
 def start_reservas():
-    booking = reservas(ALBERGUE_ID,NOITE,PEREGRINO_ID)
-    if booking:
-        print(f"Create successfuly")
-    else:
-        print(f"No booking left")
+    message = reservas(ALBERGUE_ID,NOITE,PEREGRINO_ID)
+    print(message)
 
-def reservas(albergues, noite , pregrino):
+def reservas(albergues, noite , peregrino):
     key = f"prazas:{albergues}:{noite}"
     free = r.decr(key)
     if free >= 0:
@@ -67,15 +62,17 @@ def reservas(albergues, noite , pregrino):
                 cursor.execute("""
                     INSERT INTO reservas (albergue_id, peregrino_id, noite)
                     VALUES (%s, %s, %s)
-                """, (albergues, pregrino, noite))
-                return True
+                """, (albergues, peregrino, noite))
+                print(f"Inserted booking at {albergues} at nigth {noite} with {peregrino}")
+                conn_thread.commit()
+                return f"Create successfuly"
         except psycopg2.Error as e:
-            conn.rollback()
-            print(f"Peregrino {pregrino}: ERROR: {e}")
+            conn_thread.rollback()
+            print(f"Peregrino {peregrino}: ERROR: {e}")
             r.incr(key)
-            return False
+            return f"Booking already exists"
     r.incr(key)
-    return False
+    return f"No booking left"
 
 CAMINO = "Norte"
 
@@ -95,10 +92,10 @@ def consult_path_nigth(path,nigth):
                 JOIN reservas r ON a.id = r.albergue_id
                 WHERE a.camino = %s AND r.noite = %s
                 GROUP BY a.id,a.nome,a.prazas
-                """,(path,NOITE))
+                """,(path,nigth))
 
             results = cursor.fetchall()
-          
+            conn.commit()
             return [f" {n} · {c} · {libres}" for n, c, libres in results]
     except psycopg2.Error as e:
         conn.rollback()
@@ -119,9 +116,9 @@ def cache_redis(path,nigth):
         r.expire(KEY,15)
     return (consult, "SQL")
     
-ALBERGUE_ID = 35
+ALBERGUE_ID = 13
 NOITE = "2027-05-02"
-PEREGRINO_ID = 1500
+PEREGRINO_ID = random.randint(0,1500)
 
 
 KEY = f"prazas:{ALBERGUE_ID}:{NOITE}"
@@ -133,12 +130,11 @@ def do_simulate():
 def simulate(funcion):
     bookings = int(r.get(KEY))
     exitos = []
-    fios = [threading.Thread(target=lambda peregrino_id=random.randint(0,1500) : exitos.append(funcion(ALBERGUE_ID,NOITE,peregrino_id))) for r in range(FANS)]
+    fios = [threading.Thread(target=lambda peregrino_id=random.randint(0,1500) : exitos.append(funcion(ALBERGUE_ID,NOITE,peregrino_id))) for _ in range(FANS)]
     for f in fios:
         f.start()
     for f in fios:
         f.join()
-    print(exitos)
     vendidas = sum(exitos)
     print(f"{funcion.__name__:<15} entradas: {bookings} · vendidas: {vendidas:>2} · "
           f"contador final: {r.get(KEY)}"
