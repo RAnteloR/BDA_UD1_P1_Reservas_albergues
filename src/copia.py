@@ -24,20 +24,18 @@ def segurity_copy_postgresql():
 
     file = COPY_DIR / f"postgres_{date}.dump"
 
-    env = os.environ.copy()
-
-    # IN PostgreSQL read PGPASSWORD automatically and not POSTGRES_PASSWORD
-    env["PGPASSWORD"] = PG_PASSWORD
-
-    subprocess.run([
-        "pg_dump",
-        "-h", "localhost",
-        "-p", "5432",
-        "-U", PG_USER,
-        "-d", PG_DB,
-        "-F", "c",
-        "-f", str(file)
-    ], check=True, env=env)
+    # pg_dump runs inside the container (no local PostgreSQL client needed, same version as the server).
+    # PostgreSQL reads PGPASSWORD automatically and not POSTGRES_PASSWORD
+    with open(file, "wb") as f:
+        subprocess.run([
+            "docker", "compose", "exec", "-T",
+            "-e", f"PGPASSWORD={PG_PASSWORD}",
+            "postgres",
+            "pg_dump",
+            "-U", PG_USER,
+            "-d", PG_DB,
+            "-F", "c"
+        ], stdout=f, check=True)
 
 
 def security_copy_mongo():
