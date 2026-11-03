@@ -190,7 +190,7 @@ CREATE TABLE peregrinos (
 );
 
 CREATE TABLE reservas (
-    id           INTEGER PRIMARY KEY,
+    id           SERIAL PRIMARY KEY,
     albergue_id  INTEGER NOT NULL REFERENCES albergues(id),
     peregrino_id INTEGER NOT NULL REFERENCES peregrinos(id),
     noite        DATE NOT NULL,
