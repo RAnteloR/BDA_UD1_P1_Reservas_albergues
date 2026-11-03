@@ -26,7 +26,7 @@ def segurity_copy_postgresql():
 
     env = os.environ.copy()
 
-    # IN POstgreSQL read PGPASSWORD automatically and not POSTGRES_PASSWORD
+    # IN PostgreSQL read PGPASSWORD automatically and not POSTGRES_PASSWORD
     env["PGPASSWORD"] = PG_PASSWORD
 
     subprocess.run([
@@ -51,7 +51,7 @@ def security_copy_mongo():
             "--username", MONGO_USER,
             "--password", MONGO_PASSWORD,
             "--authenticationDatabase", "admin",
-            "--db", "festival",
+            "--db", "albergues",
             "--archive",
             "--gzip"
         ], stdout=f, check=True)
