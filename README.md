@@ -51,24 +51,21 @@ python src/__init__.py simulate 13 2027-05-02   # albergue 13, noite 2027-05-02
 
 **Reservas e concorrencia**: primeiro réstase o contador en Redis (atómico); só se o resultado é >= 0 se insire en PostgreSQL. Se o INSERT falla (p. ex. peregrino duplicado) devólvese a praza con `INCR`.
 
-## 4. Proba de sobreventa
 
-10 fíos intentan reservar á vez o albergue 13 na noite 2027-05-02, cada un cun peregrino real distinto consultado en PostgreSQL. Para forzar a escaseza déixase o contador en 3 prazas:
+
+## 4. Sobreventa Test
+
+60 threads attempt to reserve a hostel for a specific night at the same time, each with a different actual pilgrim retrieved from PostgreSQL. To simulate scarcity, the counter is set to 3 spots:
+
+The hostel capacity is determined by the getIds() function, which returns Redis keys created when the start_count() method is called.
+
 
 ```bash
-docker compose exec redis redis-cli set prazas:13:2027-05-02 3
-python src/__init__.py simulate 13 2027-05-02
+python src/__init__.py simulate 
 ```
+Para repetila hai que volver executar `python src/__init__.py start`.
 
-Resultado obtido:
-
-```
-reservas        albergue 13 · noite 2027-05-02 · entradas: 3 · vendidas:  3 · contador final: 0
-```
-
-De 10 intentos concorrentes vendéronse exactamente 3 (as prazas dispoñibles); o contador quedou en 0 e en PostgreSQL só se inseriron 3 reservas novas. Non hai sobreventa. Se se executa `simulate` sen argumentos, o albergue e a noite saen ao azar e normalmente quedan moitas prazas, polo que non se ve a escaseza: para a proba hai que baixar o contador como arriba. Para repetila hai que volver executar `python src/__init__.py start`.
-
-## 5. Proba de restauración
+## 5. Restore Test
 
 **1. Copy creation**
 
