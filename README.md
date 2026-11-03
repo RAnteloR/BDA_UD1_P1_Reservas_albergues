@@ -77,7 +77,7 @@ De 10 intentos concorrentes vendéronse exactamente 3 (as prazas dispoñibles); 
 python src/copia.py
 ```
 
-This command must create security files in `copias/`.
+This command must create security files in `copias/` (`postgres_<date>.dump` and `mongodb_<date>.archive`). Run it from the project root with `docker compose up -d` running: `pg_dump` and `mongodump` are executed inside the containers, so no local PostgreSQL or MongoDB client is needed.
 
 **2. Restoration Test on PostgreSQL**
 
@@ -100,7 +100,7 @@ docker compose exec -T %POSTGRES_SERVICE_NAME pg_restore \
   --clean \
   --if-exists \
   -U %USER \
-  -d %DB $ \
+  -d %DB \
   < copias/%FILE.dump
 ```
 
