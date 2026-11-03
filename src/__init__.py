@@ -135,7 +135,7 @@ def simulate(funcion):
         f.start()
     for f in fios:
         f.join()
-    vendidas = sum(exitos)
+    vendidas = exitos.count("Create successfuly")
     print(f"{funcion.__name__:<15} entradas: {bookings} · vendidas: {vendidas:>2} · "
           f"contador final: {r.get(KEY)}"
           + ("   ← SOBREVENTA!" if vendidas > bookings else ""))

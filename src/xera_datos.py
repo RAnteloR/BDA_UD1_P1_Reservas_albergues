@@ -222,6 +222,8 @@ def carga_postgres(albergues, peregrinos, reservas):
             insire(cur, "albergues", albergues)
             insire(cur, "peregrinos", peregrinos)
             insire(cur, "reservas", reservas)
+            # Os ids van explícitos: avanza a secuencia para que os INSERT novos non choquen
+            cur.execute("SELECT setval(pg_get_serial_sequence('reservas', 'id'), MAX(id)) FROM reservas")
         print(f"  Postgres: {len(albergues)} albergues, {len(peregrinos)} peregrinos, "
               f"{len(reservas)} reservas cargados")
     finally:
