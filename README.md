@@ -152,18 +152,18 @@ And this will return all the restored data to you
 
 | Sistema    | Consultas | Media (ms) | Mediana (ms) | P95 (ms) |
 |------------|-----------|-----------|--------------|----------|
-| PostgreSQL |      2000 |     0.280 |        0.264 |    0.365 |
-| Redis      |      2000 |     0.206 |        0.185 |    0.303 |
+| PostgreSQL |      2000 |     0.271 |        0.254 |    0.348 |
+| Redis      |      2000 |     0.203 |        0.185 |    0.299 |
 
 `docker stats` tras as medicións:
 
 | Contedor | CPU | Memoria | Net I/O | Block I/O |
 |---|---|---|---|---|
-| albergues_postgres | 0.02 % | 51 MiB | 862 kB / 374 kB | 72.3 MB / 2.44 MB |
-| albergues_redis | 0.20 % | 11.6 MiB | 307 kB / 195 kB | 36.9 MB / 57.3 kB |
-| albergues_mongo | 44.21 % | 281.6 MiB | 21.6 kB / 3.35 kB | 313 MB / 217 kB |
+| albergues_postgres | 0.00 % | 59.9 MiB | 2.22 MB / 1.16 MB | 77.8 MB / 33.5 MB |
+| albergues_redis | 0.20 % | 14.2 MiB | 1.37 MB / 862 kB | 37 MB / 766 kB |
+| albergues_mongo | 0.38 % | 291.5 MiB | 60.8 kB / 9.84 kB | 327 MB / 9.33 MB |
 
-Redis é ~26 % máis rápido de media, pero a diferenza é pequena: con 4714 reservas e o índice `idx_reservas_albergue_noite` PostgreSQL xa responde en menos de 0,3 ms, e ambos miden tamén a latencia local do cliente Python. A vantaxe real de Redis é a atomicidade do contador baixo concorrencia e que descarga a PostgreSQL; crecería co volume de datos. (O 44 % de CPU de Mongo é un pico puntual tras a carga inicial.)
+Redis é ~25 % máis rápido de media (0,203 ms fronte a 0,271 ms), pero a diferenza é pequena: con 4714 reservas e o índice `idx_reservas_albergue_noite` PostgreSQL xa responde de media en menos de 0,3 ms (P95 0,348 ms), e ambos miden tamén a latencia local do cliente Python. A vantaxe real de Redis é a atomicidade do contador baixo concorrencia e que descarga a PostgreSQL; crecería co volume de datos.
 
 ## 7. Uso da IA
 
