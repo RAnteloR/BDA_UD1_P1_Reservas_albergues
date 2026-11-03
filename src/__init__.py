@@ -5,7 +5,6 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 import redis
-import random
 load_dotenv()
 
 
@@ -25,14 +24,19 @@ def start_count():
     cursor_pg.execute("""
         SELECT
             a.id,
-            r.noite,
+            d.noite::date,
             a.prazas - COUNT(r.id) AS libres
         FROM albergues a
-        JOIN reservas r ON a.id = r.albergue_id
-        GROUP BY a.id, a.prazas, r.noite
+        CROSS JOIN generate_series(
+            (SELECT MIN(noite) FROM reservas),
+            (SELECT MAX(noite) FROM reservas),
+            '1 day') AS d(noite)
+        LEFT JOIN reservas r ON r.albergue_id = a.id AND r.noite = d.noite::date
+        GROUP BY a.id, a.prazas, d.noite
     """)
 
     resultados = cursor_pg.fetchall()
+    conn.commit()
 
     for albergue_id, noite, libres in resultados:
 
@@ -41,9 +45,43 @@ def start_count():
         r.set(key, libres)
 
         print(f"{key} = {libres}")
-        
-def start_reservas():
-    message = reservas(ALBERGUE_ID,NOITE,PEREGRINO_ID)
+
+
+def peregrinos_libres(noite, cantidade):
+    """Ids reais de peregrinos (consultados en PostgreSQL) sen reserva a esa noite."""
+    with conn.cursor() as cursor:
+        cursor.execute("""
+            SELECT id FROM peregrinos
+            WHERE id NOT IN (SELECT peregrino_id FROM reservas WHERE noite = %s)
+            ORDER BY random() LIMIT %s
+        """, (noite, cantidade))
+        ids = [f[0] for f in cursor.fetchall()]
+    conn.commit()
+    return ids
+
+def escolle_albergue_noite(albergue_id=None, noite=None):
+    """(albergue_id, noite, camino) reais consultados en PostgreSQL.
+
+    Se non se indica albergue ou noite, escóllense ao azar entre os que teñen reservas.
+    """
+    with conn.cursor() as cursor:
+        cursor.execute("""
+            SELECT a.id, r.noite, a.camino
+            FROM albergues a JOIN reservas r ON r.albergue_id = a.id
+            WHERE (%(a)s::int IS NULL OR a.id = %(a)s) AND (%(n)s::date IS NULL OR r.noite = %(n)s)
+            GROUP BY a.id, r.noite, a.camino
+            ORDER BY random() LIMIT 1
+        """, {"a": albergue_id, "n": noite})
+        fila = cursor.fetchone()
+    conn.commit()
+    if fila is None:
+        sys.exit("Non hai ningún albergue/noite con eses datos en PostgreSQL")
+    return fila[0], str(fila[1]), fila[2]
+
+
+def start_reservas(albergue_id, noite, camino):
+    peregrino_id = peregrinos_libres(noite, 1)[0]
+    message = reservas(albergue_id, noite, peregrino_id)
     print(message)
 
 def reservas(albergues, noite , peregrino):
@@ -74,14 +112,12 @@ def reservas(albergues, noite , peregrino):
     r.incr(key)
     return f"No booking left"
 
-CAMINO = "Norte"
-
-def general_consult():
-    consult,where =cache_redis(CAMINO,NOITE)
+def general_consult(albergue_id, noite, camino):
+    consult,where =cache_redis(camino,noite)
 
     for c in consult:
         print(f"  {c}")
-    print(f"\nCaducidade restante da chave: {r.ttl(f"booking_left:albergue:{CAMINO}:{NOITE}")} s")
+    print(f"\nCaducidade restante da chave: {r.ttl(f"booking_left:albergue:{camino}:{noite}")} s")
     print(f"Did it in {where}")
 
 def consult_path_nigth(path,nigth):
@@ -116,33 +152,36 @@ def cache_redis(path,nigth):
         r.expire(KEY,15)
     return (consult, "SQL")
     
-ALBERGUE_ID = 13
-NOITE = "2027-05-02"
-PEREGRINO_ID = random.randint(0,1500)
-
-
-KEY = f"prazas:{ALBERGUE_ID}:{NOITE}"
 FANS = 10
 
-def do_simulate():
-    simulate(reservas)
+def do_simulate(albergue_id, noite, camino):
+    simulate(reservas, albergue_id, noite)
 
-def simulate(funcion):
-    bookings = int(r.get(KEY))
+def simulate(funcion, albergue_id, noite):
+    key = f"prazas:{albergue_id}:{noite}"
+    bookings = int(r.get(key))
     exitos = []
-    fios = [threading.Thread(target=lambda peregrino_id=random.randint(0,1500) : exitos.append(funcion(ALBERGUE_ID,NOITE,peregrino_id))) for _ in range(FANS)]
+    ids = peregrinos_libres(noite, FANS)
+    fios = [threading.Thread(target=lambda peregrino_id=pid : exitos.append(funcion(albergue_id,noite,peregrino_id))) for pid in ids]
     for f in fios:
         f.start()
     for f in fios:
         f.join()
     vendidas = exitos.count("Create successfuly")
-    print(f"{funcion.__name__:<15} entradas: {bookings} · vendidas: {vendidas:>2} · "
-          f"contador final: {r.get(KEY)}"
+    print(f"{funcion.__name__:<15} albergue {albergue_id} · noite {noite} · entradas: {bookings} · vendidas: {vendidas:>2} · "
+          f"contador final: {r.get(key)}"
           + ("   ← SOBREVENTA!" if vendidas > bookings else ""))
 
 if __name__ == "__main__":
+    # python src/__init__.py <start|reserva|simulate|consult> [albergue_id] [noite AAAA-MM-DD]
     parte = sys.argv[1] if len(sys.argv) > 1 else "start"
-    {"start": start_count, "reserva": start_reservas,"simulate":do_simulate,"consult":general_consult}[parte]()
+    if parte == "start":
+        start_count()
+    else:
+        albergue_arg = int(sys.argv[2]) if len(sys.argv) > 2 else None
+        noite_arg = sys.argv[3] if len(sys.argv) > 3 else None
+        accion = {"reserva": start_reservas, "simulate": do_simulate, "consult": general_consult}[parte]
+        accion(*escolle_albergue_noite(albergue_arg, noite_arg))
 
 cursor_pg.close()
 conn.close()
